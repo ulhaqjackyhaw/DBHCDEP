@@ -15,6 +15,9 @@ class ImportDataKaryawanJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public $timeout = 3600; // 1 jam batas eksekusi job
+    public $tries = 1;
+
     protected $filePath;
     protected $sessionId;
     protected $mode; // 'add' or 'replace'
@@ -28,17 +31,21 @@ class ImportDataKaryawanJob implements ShouldQueue
 
     public function handle()
     {
+        // Alokasikan memori dan waktu tanpa batas untuk file puluhan ribu baris
+        @ini_set('memory_limit', '2048M');
+        @set_time_limit(0);
+
         try {
             // Initialize progress
             Cache::put("import_progress_{$this->sessionId}", [
-                'progress' => 0,
+                'progress' => 1,
                 'status' => 'processing',
-                'message' => 'Memulai import...'
+                'message' => 'Memulai proses import...'
             ], 3600);
 
             if ($this->mode === 'replace') {
                 Cache::put("import_progress_{$this->sessionId}", [
-                    'progress' => 10,
+                    'progress' => 3,
                     'status' => 'processing',
                     'message' => 'Menghapus data lama...'
                 ], 3600);
@@ -46,16 +53,33 @@ class ImportDataKaryawanJob implements ShouldQueue
                 \App\Models\DataKaryawan::query()->delete();
             }
 
+            // Hitung total baris file Excel secara instan tanpa load seluruh data ke RAM
+            $totalRows = 0;
+            try {
+                $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($this->filePath);
+                $reader->setReadDataOnly(true);
+                $worksheetInfo = $reader->listWorksheetInfo($this->filePath);
+                if (!empty($worksheetInfo) && isset($worksheetInfo[0]['totalRows'])) {
+                    $totalRows = max(0, $worksheetInfo[0]['totalRows'] - 1); // kurangi 1 baris header
+                }
+            } catch (\Throwable $e) {
+                \Log::warning("Gagal menghitung info worksheet: " . $e->getMessage());
+            }
+
             Cache::put("import_progress_{$this->sessionId}", [
-                'progress' => 20,
+                'progress' => 5,
                 'status' => 'processing',
-                'message' => 'Membaca file Excel...'
+                'message' => 'Membaca file Excel' . ($totalRows > 0 ? " ({$totalRows} baris)..." : "...")
             ], 3600);
 
             // Track count sebelum import
             $countBefore = \App\Models\DataKaryawan::count();
 
             $import = new DataKaryawanImport($this->sessionId);
+            if ($totalRows > 0) {
+                $import->setTotalRows($totalRows);
+            }
+
             Excel::import($import, $this->filePath);
 
             // Track count setelah import

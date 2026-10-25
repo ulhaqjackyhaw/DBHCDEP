@@ -414,9 +414,11 @@ class DataKaryawanController extends Controller
 
             $file->move(dirname($filePath), basename($filePath));
 
-            // Dispatch job on sync queue for immediate processing
-            \App\Jobs\ImportDataKaryawanJob::dispatch($filePath, $sessionId, 'add')
-                ->onQueue('sync');
+            // Dispatch job ke queue default
+            \App\Jobs\ImportDataKaryawanJob::dispatch($filePath, $sessionId, 'add');
+
+            // Trigger worker di background jika belum ada supervisor daemon
+            $this->triggerQueueWorkerIfIdle();
 
             // Return view with session ID for progress tracking
             return view('karyawan.import-progress', compact('sessionId'));
@@ -451,9 +453,11 @@ class DataKaryawanController extends Controller
 
             $file->move(dirname($filePath), basename($filePath));
 
-            // Dispatch job on sync queue for immediate processing
-            \App\Jobs\ImportDataKaryawanJob::dispatch($filePath, $sessionId, 'replace')
-                ->onQueue('sync');
+            // Dispatch job ke queue default
+            \App\Jobs\ImportDataKaryawanJob::dispatch($filePath, $sessionId, 'replace');
+
+            // Trigger worker di background jika belum ada supervisor daemon
+            $this->triggerQueueWorkerIfIdle();
 
             // Return view with session ID for progress tracking
             return view('karyawan.import-progress', compact('sessionId'));
@@ -503,6 +507,29 @@ class DataKaryawanController extends Controller
                 'status' => 'error',
                 'message' => 'Error: ' . $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Memastikan worker berjalan di background jika server belum setup supervisor daemon
+     */
+    private function triggerQueueWorkerIfIdle(): void
+    {
+        if (config('queue.default') === 'sync') {
+            return;
+        }
+
+        try {
+            $artisan = base_path('artisan');
+            $php = defined('PHP_BINARY') && PHP_BINARY ? PHP_BINARY : 'php';
+
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B \"\" \"{$php}\" \"{$artisan}\" queue:work --stop-when-empty --timeout=3600 --memory=2048 > NUL 2>&1", "r"));
+            } else {
+                exec("{$php} \"{$artisan}\" queue:work --stop-when-empty --timeout=3600 --memory=2048 > /dev/null 2>&1 &");
+            }
+        } catch (\Throwable $e) {
+            \Log::warning("Could not auto-trigger background queue worker: " . $e->getMessage());
         }
     }
 }
