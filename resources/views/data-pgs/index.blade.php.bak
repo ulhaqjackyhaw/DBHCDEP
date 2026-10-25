@@ -1,0 +1,422 @@
+@extends('layouts.app')
+
+@section('title', 'Data PGS')
+@section('header-title', 'Data Pelaksana Tugas Sementara (PGS)')
+
+@push('head-styles')
+    <style>
+        .table tbody tr.cursor-pointer:hover {
+            background-color: #f8fafc !important;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .modal-body .form-control-plaintext {
+            font-weight: 500;
+            color: #334155;
+            margin-bottom: 0;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+        }
+
+        .table-responsive {
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .btn-outline-info:hover {
+            transform: scale(1.05);
+            transition: transform 0.2s ease;
+        }
+    </style>
+@endpush
+
+@section('content')
+    {{-- Notifikasi Sukses dan Error --}}
+    @if (session('success'))
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0" role="alert">
+            {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @can('admin')
+        {{-- Bagian Upload Massal --}}
+        <div class="bg-white p-4 sm:p-5 rounded-xl shadow-sm mb-5">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                <h2 class="text-lg font-semibold text-slate-800 mb-0">Upload Data Massal</h2>
+                <div class="d-flex gap-2">
+                    <a href="{{ route('data-pgs.template.download') }}"
+                        class="btn btn-outline-success d-flex align-items-center gap-2">
+                        <i class="bi bi-file-earmark-arrow-down-fill"></i>
+                        <span>Download Template</span>
+                    </a>
+                    <a href="{{ route('data-pgs.export') }}" class="btn btn-outline-info d-flex align-items-center gap-2">
+                        <i class="bi bi-download"></i>
+                        <span>Export Data</span>
+                    </a>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <form action="{{ route('data-pgs.import.add') }}" method="POST" enctype="multipart/form-data"
+                        class="d-flex gap-3">
+                        @csrf
+                        <input type="file" name="file" class="form-control" required accept=".xlsx,.xls,.csv">
+                        <button type="submit" class="btn btn-primary d-flex align-items-center gap-2 text-nowrap">
+                            <i class="bi bi-cloud-arrow-up-fill"></i> Tambah
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <form action="{{ route('data-pgs.import.replace') }}" method="POST" enctype="multipart/form-data"
+                        class="d-flex gap-3">
+                        @csrf
+                        <input type="file" name="file" class="form-control" required accept=".xlsx,.xls,.csv">
+                        <button type="submit" class="btn btn-danger d-flex align-items-center gap-2 text-nowrap">
+                            <i class="bi bi-arrow-repeat"></i> Ganti Semua
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {{-- Penjelasan Mode Upload --}}
+            <div class="row g-3 mt-2">
+                <div class="col-md-6">
+                    <div class="alert alert-info mb-0 py-2">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-info-circle-fill me-2 mt-1 text-info"></i>
+                            <div>
+                                <strong>Mode Tambah:</strong><br>
+                                <small>Data baru akan ditambahkan ke database. Data lama tetap ada dan tidak akan
+                                    terhapus.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="alert alert-warning mb-0 py-2">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-exclamation-triangle-fill me-2 mt-1 text-warning"></i>
+                            <div>
+                                <strong>Mode Ganti Semua:</strong><br>
+                                <small>SEMUA data lama akan dihapus dan diganti dengan data dari file yang
+                                    diupload.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endcan
+
+    {{-- Tabel Data PGS --}}
+    <div class="bg-white rounded-xl shadow-sm border-0">
+        <div class="p-4 border-bottom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h2 class="h4 font-semibold text-slate-800 mb-1">Daftar Data PGS</h2>
+                    <p class="text-slate-600 text-sm mb-0">Kelola data Pelaksana Tugas Sementara (PGS)</p>
+                </div>
+
+                @can('admin')
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('data-pgs.create') }}"
+                            class="btn btn-primary d-flex align-items-center gap-2 shadow-sm">
+                            <i class="bi bi-plus-circle-fill"></i>
+                            <span>Tambah Data PGS</span>
+                        </a>
+                    </div>
+                @endcan
+            </div>
+        </div>
+
+        <div class="p-4">
+            @if ($dataPgs->isEmpty())
+                <div class="text-center py-5">
+                    <div class="mb-3">
+                        <i class="bi bi-inbox text-slate-400" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="text-slate-600 mb-2">Tidak ada data PGS</h5>
+                    <p class="text-slate-500 mb-0">Data akan muncul setelah Anda menambahkan data PGS pertama.</p>
+                </div>
+            @else
+                <div class="table-responsive" x-data="tableSortData()">
+                    {{-- Search Box --}}
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="bi bi-search text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0 ps-0"
+                                placeholder="Cari berdasarkan NIK, Nama, Jabatan, atau Lokasi..." x-model="searchQuery"
+                                @input="search()">
+                            <button class="btn btn-outline-secondary" type="button" @click="clearSearch()"
+                                x-show="searchQuery">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted" x-show="searchQuery">
+                            Menampilkan <span x-text="filteredRows().length"></span> dari <span x-text="rows.length"></span>
+                            data
+                        </small>
+                    </div>
+
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('nik')"
+                                    style="cursor:pointer">
+                                    NIK
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'nik' && sortAsc,
+                                            'bi-arrow-down': sortField === 'nik' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'nik'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('nama')"
+                                    style="cursor:pointer">
+                                    Nama
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'nama' && sortAsc,
+                                            'bi-arrow-down': sortField === 'nama' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'nama'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('jabatan_definitif')"
+                                    style="cursor:pointer">
+                                    Jabatan Definitif
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'jabatan_definitif' && sortAsc,
+                                            'bi-arrow-down': sortField === 'jabatan_definitif' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'jabatan_definitif'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('jabatan_pgs')"
+                                    style="cursor:pointer">
+                                    Jabatan PGS
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'jabatan_pgs' && sortAsc,
+                                            'bi-arrow-down': sortField === 'jabatan_pgs' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'jabatan_pgs'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('lokasi_unit_kerja')"
+                                    style="cursor:pointer">
+                                    Lokasi/Unit Kerja
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'lokasi_unit_kerja' && sortAsc,
+                                            'bi-arrow-down': sortField === 'lokasi_unit_kerja' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'lokasi_unit_kerja'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('tanggal_pgs_formatted')"
+                                    style="cursor:pointer">
+                                    Tanggal Mulai PGS
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'tanggal_pgs_formatted' && sortAsc,
+                                            'bi-arrow-down': sortField === 'tanggal_pgs_formatted' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'tanggal_pgs_formatted'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold" @click="sortBy('durasi_pgs')"
+                                    style="cursor:pointer">
+                                    Durasi
+                                    <i class="bi"
+                                        :class="{
+                                            'bi-arrow-up': sortField === 'durasi_pgs' && sortAsc,
+                                            'bi-arrow-down': sortField === 'durasi_pgs' && !sortAsc,
+                                            'bi-arrow-down-up': sortField !== 'durasi_pgs'
+                                        }"></i>
+                                </th>
+                                <th class="border-0 text-slate-700 fw-semibold text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="row in sortedRows()" :key="row.id">
+                                <tr class="cursor-pointer" @click="showDetail(row.id)">
+                                    <td class="border-0">
+                                        <span class="badge bg-light text-dark border" x-text="row.nik"></span>
+                                    </td>
+                                    <td class="border-0 fw-medium text-slate-800" x-text="row.nama"></td>
+                                    <td class="border-0 text-slate-600" x-text="row.jabatan_definitif"></td>
+                                    <td class="border-0">
+                                        <span
+                                            class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25"
+                                            x-text="row.jabatan_pgs"></span>
+                                    </td>
+                                    <td class="border-0 text-slate-600" x-text="row.lokasi_unit_kerja"></td>
+                                    <td class="border-0 text-slate-600">
+                                        <i class="bi bi-calendar3 text-muted me-1"></i><span
+                                            x-text="row.tanggal_pgs_formatted"></span>
+                                    </td>
+                                    <td class="border-0">
+                                        <span
+                                            class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"
+                                            x-text="row.durasi_pgs"></span>
+                                    </td>
+                                    <td class="border-0 text-center">
+                                        <div class="d-flex justify-content-center gap-2">
+                                            <button type="button" class="btn btn-outline-info btn-sm"
+                                                @click.stop="showDetail(row.id)">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+
+                                            @can('admin')
+                                                <a :href="row.edit_url" class="btn btn-outline-warning btn-sm" @click.stop>
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+                                                <form :action="row.delete_url" method="POST" class="d-inline" @click.stop>
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm"
+                                                        onclick="return confirm('Yakin ingin menghapus data ini?')">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            @endcan
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="filteredRows().length === 0">
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-search me-2"></i>Tidak ada data yang sesuai dengan pencarian
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- Modal Detail Data PGS --}}
+    <div class="modal fade" id="pgsDetailModal" tabindex="-1" aria-labelledby="pgsDetailModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-gradient border-0"
+                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <h5 class="modal-title text-white fw-semibold" id="pgsDetailModalLabel">
+                        <i class="bi bi-person-badge me-2"></i>Detail Data PGS
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="pgsDetailContent">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+@endsection
+
+@push('scripts')
+    <script>
+        // Data PGS for Alpine.js
+        const dataPgsRows = {!! json_encode(
+            $dataPgs->map(function ($pgs) {
+                    return [
+                        'id' => $pgs->id,
+                        'nik' => $pgs->nik,
+                        'nama' => $pgs->nama,
+                        'jabatan_definitif' => $pgs->jabatan_definitif,
+                        'jabatan_pgs' => $pgs->jabatan_pgs,
+                        'lokasi_unit_kerja' => $pgs->lokasi_unit_kerja,
+                        'tanggal_pgs_formatted' => $pgs->tanggal_pgs_formatted,
+                        'durasi_pgs' => $pgs->durasi_pgs,
+                        'edit_url' => route('data-pgs.edit', $pgs),
+                        'delete_url' => route('data-pgs.destroy', $pgs),
+                    ];
+                })->toArray(),
+        ) !!};
+
+        function showDetail(pgsId) {
+            $('#pgsDetailModal').modal('show');
+            // Load detail via AJAX
+            fetch(`/data-pgs/${pgsId}`)
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('pgsDetailContent').innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('pgsDetailContent').innerHTML =
+                        '<div class="text-center text-danger p-4">Gagal memuat data</div>';
+                });
+        }
+
+        function tableSortData() {
+            return {
+                sortField: '',
+                sortAsc: true,
+                searchQuery: '',
+                rows: dataPgsRows,
+                sortBy(field) {
+                    if (this.sortField === field) {
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortField = field;
+                        this.sortAsc = true;
+                    }
+                },
+                search() {
+                    // Trigger reactivity
+                },
+                clearSearch() {
+                    this.searchQuery = '';
+                },
+                filteredRows() {
+                    if (!this.searchQuery) return this.rows;
+                    const query = this.searchQuery.toLowerCase();
+                    return this.rows.filter(row => {
+                        return (
+                            row.nik.toLowerCase().includes(query) ||
+                            row.nama.toLowerCase().includes(query) ||
+                            row.jabatan_definitif.toLowerCase().includes(query) ||
+                            row.jabatan_pgs.toLowerCase().includes(query) ||
+                            row.lokasi_unit_kerja.toLowerCase().includes(query)
+                        );
+                    });
+                },
+                sortedRows() {
+                    let filtered = this.filteredRows();
+                    if (!this.sortField) return filtered;
+                    return [...filtered].sort((a, b) => {
+                        let aVal = a[this.sortField] || '';
+                        let bVal = b[this.sortField] || '';
+                        // Try numeric sort
+                        let aNum = parseFloat(aVal.toString().replace(/[^0-9.,-]/g, '').replace(',', '.'));
+                        let bNum = parseFloat(bVal.toString().replace(/[^0-9.,-]/g, '').replace(',', '.'));
+                        if (!isNaN(aNum) && !isNaN(bNum)) {
+                            return this.sortAsc ? aNum - bNum : bNum - aNum;
+                        }
+                        return this.sortAsc ? aVal.toString().localeCompare(bVal.toString()) : bVal.toString()
+                            .localeCompare(aVal.toString());
+                    });
+                }
+            };
+        }
+    </script>
+@endpush
