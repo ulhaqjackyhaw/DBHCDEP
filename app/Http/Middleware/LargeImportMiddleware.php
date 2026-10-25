@@ -17,8 +17,8 @@ class LargeImportMiddleware
         // Set execution time to 15 minutes (900 seconds)
         set_time_limit(900);
 
-        // Increase memory limit to 512MB
-        ini_set('memory_limit', '512M');
+        // Increase memory limit to 2048MB
+        ini_set('memory_limit', '2048M');
 
         // Increase max input time for file uploads
         ini_set('max_input_time', '900');
