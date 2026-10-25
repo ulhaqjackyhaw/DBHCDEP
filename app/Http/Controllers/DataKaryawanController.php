@@ -394,37 +394,51 @@ class DataKaryawanController extends Controller
         $request->validate(['file' => 'required|mimes:xlsx,csv']);
 
         try {
-            // Generate unique session ID
-            $sessionId = uniqid('import_', true);
+            // Alokasikan memori dan waktu eksekusi langsung untuk menangani puluhan ribu baris
+            @ini_set('memory_limit', '2048M');
+            @ini_set('max_execution_time', 900);
+            @set_time_limit(900);
 
-            // Initialize progress immediately in cache
-            \Cache::put("import_progress_{$sessionId}", [
-                'progress' => 0,
-                'status' => 'initializing',
-                'message' => 'Menginisialisasi proses import...'
-            ], 3600);
+            $countBefore = DataKaryawan::count();
+            $import = new DataKaryawanImport();
+            Excel::import($import, $request->file('file'));
+            $countAfter = DataKaryawan::count();
+            $imported = $countAfter - $countBefore;
+            $skipped = $import->getSkippedCount();
 
-            // Store file temporarily
-            $file = $request->file('file');
-            $filePath = storage_path('app/temp/' . $sessionId . '_' . $file->getClientOriginalName());
-
-            if (!file_exists(dirname($filePath))) {
-                mkdir(dirname($filePath), 0755, true);
+            // Catat ke audit log
+            if (\Auth::check()) {
+                \App\Models\AuditLog::create([
+                    'user_id' => \Auth::id(),
+                    'user_name' => \Auth::user()->name,
+                    'user_email' => \Auth::user()->email,
+                    'action' => 'bulk_created',
+                    'model_type' => 'App\\Models\\DataKaryawan',
+                    'model_id' => null,
+                    'model_identifier' => 'Bulk Import - ' . $request->file('file')->getClientOriginalName(),
+                    'old_values' => null,
+                    'new_values' => [
+                        'imported' => $imported,
+                        'skipped' => $skipped,
+                        'total_after' => $countAfter,
+                        'mode' => 'add',
+                        'filename' => $request->file('file')->getClientOriginalName()
+                    ],
+                    'changes' => null,
+                    'ip_address' => request()->ip(),
+                    'user_agent' => request()->userAgent(),
+                ]);
             }
 
-            $file->move(dirname($filePath), basename($filePath));
+            $message = "Import berhasil! {$imported} data berhasil ditambahkan/diperbarui.";
+            if ($skipped > 0) {
+                $message .= " ({$skipped} baris dilewati karena NIK kosong).";
+            }
 
-            // Dispatch job ke queue default
-            \App\Jobs\ImportDataKaryawanJob::dispatch($filePath, $sessionId, 'add');
-
-            // Trigger worker di background jika belum ada supervisor daemon
-            $this->triggerQueueWorkerIfIdle();
-
-            // Return view with session ID for progress tracking
-            return view('karyawan.import-progress', compact('sessionId'));
+            return redirect()->route('karyawan.index')->with('success', $message);
         } catch (\Exception $e) {
             \Log::error('Import Add Error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Terjadi kesalahan saat import. Silakan coba lagi.');
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat import: ' . $e->getMessage());
         }
     }
 
@@ -433,37 +447,51 @@ class DataKaryawanController extends Controller
         $request->validate(['file' => 'required|mimes:xlsx,csv']);
 
         try {
-            // Generate unique session ID
-            $sessionId = uniqid('import_', true);
+            // Alokasikan memori dan waktu eksekusi langsung untuk menangani puluhan ribu baris
+            @ini_set('memory_limit', '2048M');
+            @ini_set('max_execution_time', 900);
+            @set_time_limit(900);
 
-            // Initialize progress immediately in cache
-            \Cache::put("import_progress_{$sessionId}", [
-                'progress' => 0,
-                'status' => 'initializing',
-                'message' => 'Menginisialisasi proses import...'
-            ], 3600);
+            $countBefore = DataKaryawan::count();
+            DataKaryawan::query()->delete();
 
-            // Store file temporarily
-            $file = $request->file('file');
-            $filePath = storage_path('app/temp/' . $sessionId . '_' . $file->getClientOriginalName());
+            $import = new DataKaryawanImport();
+            Excel::import($import, $request->file('file'));
+            $countAfter = DataKaryawan::count();
+            $skipped = $import->getSkippedCount();
 
-            if (!file_exists(dirname($filePath))) {
-                mkdir(dirname($filePath), 0755, true);
+            // Catat ke audit log
+            if (\Auth::check()) {
+                \App\Models\AuditLog::create([
+                    'user_id' => \Auth::id(),
+                    'user_name' => \Auth::user()->name,
+                    'user_email' => \Auth::user()->email,
+                    'action' => 'bulk_replaced',
+                    'model_type' => 'App\\Models\\DataKaryawan',
+                    'model_id' => null,
+                    'model_identifier' => 'Bulk Replace - ' . $request->file('file')->getClientOriginalName(),
+                    'old_values' => ['total_records' => $countBefore],
+                    'new_values' => [
+                        'total_after' => $countAfter,
+                        'skipped' => $skipped,
+                        'mode' => 'replace',
+                        'filename' => $request->file('file')->getClientOriginalName()
+                    ],
+                    'changes' => null,
+                    'ip_address' => request()->ip(),
+                    'user_agent' => request()->userAgent(),
+                ]);
             }
 
-            $file->move(dirname($filePath), basename($filePath));
+            $message = "Semua data lama berhasil diganti! Total {$countAfter} data karyawan tersimpan.";
+            if ($skipped > 0) {
+                $message .= " ({$skipped} baris dilewati karena NIK kosong).";
+            }
 
-            // Dispatch job ke queue default
-            \App\Jobs\ImportDataKaryawanJob::dispatch($filePath, $sessionId, 'replace');
-
-            // Trigger worker di background jika belum ada supervisor daemon
-            $this->triggerQueueWorkerIfIdle();
-
-            // Return view with session ID for progress tracking
-            return view('karyawan.import-progress', compact('sessionId'));
+            return redirect()->route('karyawan.index')->with('success', $message);
         } catch (\Exception $e) {
             \Log::error('Import Replace Error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Terjadi kesalahan saat import. Silakan coba lagi.');
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat import: ' . $e->getMessage());
         }
     }
 

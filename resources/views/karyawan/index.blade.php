@@ -91,7 +91,8 @@
             <div class="row g-3">
                 <div class="col-md-6">
                     <form id="importAddForm" action="{{ route('karyawan.import.add') }}" method="POST"
-                        enctype="multipart/form-data" class="d-flex gap-3">
+                        enctype="multipart/form-data" class="d-flex gap-3"
+                        onsubmit="const btn = this.querySelector('button[type=submit]'); btn.disabled = true; btn.innerHTML = '<span class=\'spinner-border spinner-border-sm me-2\'></span>Memproses...';">
                         @csrf
                         <input type="file" name="file" class="form-control" required>
                         <button type="submit" class="btn btn-primary d-flex align-items-center gap-2 text-nowrap"><i
@@ -100,7 +101,8 @@
                 </div>
                 <div class="col-md-6">
                     <form id="importReplaceForm" action="{{ route('karyawan.import.replace') }}" method="POST"
-                        enctype="multipart/form-data" class="d-flex gap-3">
+                        enctype="multipart/form-data" class="d-flex gap-3"
+                        onsubmit="if(!confirm('Apakah Anda yakin ingin MENGHAPUS SEMUA data lama dan menggantinya dengan file ini?')) { return false; } const btn = this.querySelector('button[type=submit]'); btn.disabled = true; btn.innerHTML = '<span class=\'spinner-border spinner-border-sm me-2\'></span>Mengganti...';">
                         @csrf
                         <input type="file" name="file" class="form-control" required>
                         <button type="submit" class="btn btn-danger d-flex align-items-center gap-2 text-nowrap"><i
